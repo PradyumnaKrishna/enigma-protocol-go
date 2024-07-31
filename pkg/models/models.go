@@ -24,3 +24,14 @@ type TransmissionData struct {
 	To      string `json:"to"`
 	Payload string `json:"payload"`
 }
+
+type WebsocketMessage struct {
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Payload string `json:"payload"`
+}
+
+type PendingMessage struct {
+	To      string `json:"to"`
+	Payload string `json:"payload"`
+}

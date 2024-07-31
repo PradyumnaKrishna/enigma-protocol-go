@@ -82,3 +82,92 @@ func TestSaveUser(t *testing.T) {
 		t.Fatalf("Expected public key %s, got %s", publicKey, key)
 	}
 }
+
+func TestSavePendingMessage(t *testing.T) {
+	db, err := NewDatabase(DatabaseOpts{
+		uri:    "test.db",
+		table:  "TestTable",
+		driver: "sqlite3",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	defer db.conn.Close()
+	defer os.Remove("test.db")
+
+	toUser := "test-user"
+	payload := "test-payload"
+	err = db.SavePendingMessage(toUser, payload)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	messages, err := db.GetPendingMessages(toUser)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if len(messages) != 1 || messages[0] != payload {
+		t.Fatalf("Expected payload %s, got %v", payload, messages)
+	}
+}
+
+func TestGetPendingMessages(t *testing.T) {
+	db, err := NewDatabase(DatabaseOpts{
+		uri:    "test.db",
+		table:  "TestTable",
+		driver: "sqlite3",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	defer db.conn.Close()
+	defer os.Remove("test.db")
+
+	toUser := "test-user"
+	payload := "test-payload"
+	err = db.SavePendingMessage(toUser, payload)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	messages, err := db.GetPendingMessages(toUser)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if len(messages) != 1 || messages[0] != payload {
+		t.Fatalf("Expected payload %s, got %v", payload, messages)
+	}
+}
+
+func TestDeletePendingMessages(t *testing.T) {
+	db, err := NewDatabase(DatabaseOpts{
+		uri:    "test.db",
+		table:  "TestTable",
+		driver: "sqlite3",
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	defer db.conn.Close()
+	defer os.Remove("test.db")
+
+	toUser := "test-user"
+	payload := "test-payload"
+	err = db.SavePendingMessage(toUser, payload)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	err = db.DeletePendingMessages(toUser)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	messages, err := db.GetPendingMessages(toUser)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("Expected no messages, got %v", messages)
+	}
+}

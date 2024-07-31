@@ -54,6 +54,11 @@ func NewDefaultDatabase() (*Database, error) {
 
 func (d *Database) CreateTable() error {
 	_, err := d.conn.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id TEXT PRIMARY KEY, publicKey TEXT, last_activity DATE)", d.table))
+	if err != nil {
+		return err
+	}
+
+	_, err = d.conn.Exec("CREATE TABLE IF NOT EXISTS PendingMessages (id INTEGER PRIMARY KEY AUTOINCREMENT, toUser TEXT, payload TEXT)")
 	return err
 }
 
@@ -86,5 +91,39 @@ func (d *Database) IsUserExists(id string) bool {
 
 func (d *Database) UpdateActivity(id string) error {
 	_, err := d.conn.Exec(fmt.Sprintf("UPDATE %s SET last_activity = ? WHERE id = ?", d.table), time.Now(), id)
+	return err
+}
+
+func (d *Database) SavePendingMessage(toUser string, payload string) error {
+	stmt, err := d.conn.Prepare("INSERT INTO PendingMessages (toUser, payload) VALUES (?, ?)")
+	if err != nil {
+		return err
+	}
+
+	_, err = stmt.Exec(toUser, payload)
+	return err
+}
+
+func (d *Database) GetPendingMessages(toUser string) ([]string, error) {
+	rows, err := d.conn.Query("SELECT payload FROM PendingMessages WHERE toUser = ?", toUser)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []string
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		messages = append(messages, payload)
+	}
+
+	return messages, nil
+}
+
+func (d *Database) DeletePendingMessages(toUser string) error {
+	_, err := d.conn.Exec("DELETE FROM PendingMessages WHERE toUser = ?", toUser)
 	return err
 }

@@ -7,6 +7,7 @@ import (
 
 	"enigma-protocol-go/pkg/db"
 	"enigma-protocol-go/pkg/models"
+	"enigma-protocol-go/pkg/websockets"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -39,6 +40,9 @@ func StartServer() {
 	}
 	protocolAPI := NewProtocolAPI(*database)
 	protocolAPI.Register(router)
+
+	websocketAPI := websockets.NewWebsocketAPI(*database)
+	websocketAPI.Register(router)
 
 	router.GET("/", inJSON(index))
 	router.GET("/version", inJSON(version))

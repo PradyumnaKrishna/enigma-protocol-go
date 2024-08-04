@@ -7,7 +7,6 @@ import (
 
 	"enigma-protocol-go/pkg/db"
 	"enigma-protocol-go/pkg/models"
-	"enigma-protocol-go/pkg/websockets"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -30,25 +29,32 @@ func inJSON(api APIFunc) httprouter.Handle {
 	}
 }
 
-func StartServer() {
+func NewRouter(dbopts *db.DatabaseOpts) (*httprouter.Router, error) {
+	var database *db.Database
+	var err error
 	router := httprouter.New()
 
-	database, err := db.NewDefaultDatabase()
+	if dbopts == nil {
+		database, err = db.NewDefaultDatabase()
+	} else {
+		database, err = db.NewDatabase(*dbopts)
+	}
+
 	if err != nil {
 		fmt.Println("Error starting server:", err)
-		return
+		return nil, err
 	}
+
 	protocolAPI := NewProtocolAPI(*database)
 	protocolAPI.Register(router)
 
-	websocketAPI := websockets.NewWebsocketAPI(*database)
+	websocketAPI := NewWebsocketAPI(*database)
 	websocketAPI.Register(router)
 
 	router.GET("/", inJSON(index))
 	router.GET("/version", inJSON(version))
 
-	fmt.Println("Server started at :8080")
-	http.ListenAndServe(":8080", router)
+	return router, nil
 }
 
 func index(r *http.Request, ps httprouter.Params) (interface{}, *models.APIError) {

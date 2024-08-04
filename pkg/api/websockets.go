@@ -2,26 +2,58 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"sync"
 
 	"enigma-protocol-go/pkg/db"
 	"enigma-protocol-go/pkg/models"
-	"nhooyr.io/websocket"
+
 	"github.com/julienschmidt/httprouter"
+	"nhooyr.io/websocket"
 )
 
 type WebsocketAPI struct {
-	db *db.Database
-	connections map[string]*websocket.Conn
-	mu sync.Mutex
+	db    *db.Database
+	chats map[string]Chat
+	mu    sync.Mutex
 }
 
 func NewWebsocketAPI(d db.Database) *WebsocketAPI {
 	return &WebsocketAPI{
-		db: &d,
-		connections: make(map[string]*websocket.Conn),
+		db:    &d,
+		chats: make(map[string]Chat),
 	}
+}
+
+type Chat struct {
+	connection *websocket.Conn
+}
+
+func (chat *Chat) sendJSON(ctx context.Context, message interface{}) error {
+	if chat.connection == nil {
+		return nil
+	}
+
+	data, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	return chat.connection.Write(ctx, websocket.MessageText, []byte(data))
+}
+
+func (chat *Chat) SendMessage(ctx context.Context, message models.TransmissionData) error {
+	return chat.sendJSON(ctx, message)
+}
+
+func (chat *Chat) sendPendingMessages(messages []models.TransmissionData) error {
+	for _, message := range messages {
+		err := chat.SendMessage(context.Background(), message)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (w *WebsocketAPI) Register(r *httprouter.Router) {
@@ -31,43 +63,48 @@ func (w *WebsocketAPI) Register(r *httprouter.Router) {
 func (w *WebsocketAPI) handleWebsocket(wr http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	id := ps.ByName("id")
 
-	conn, err := websocket.Accept(wr, r, nil)
+	conn, err := websocket.Accept(wr, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{"localhost:8080"},
+	})
+
 	if err != nil {
 		http.Error(wr, "Failed to establish websocket connection", http.StatusInternalServerError)
 		return
 	}
-	defer conn.Close(websocket.StatusInternalError, "Internal error")
+	defer conn.Close(websocket.StatusInvalidFramePayloadData, "Internal Error")
 
+	ctx := context.Background()
+	chat := Chat{connection: conn}
+	if !w.db.IsUserExists(id) {
+		chat.sendJSON(ctx, models.ErrorMessage{
+			Error: "User not found",
+		})
+		return
+	}
+
+	// if user already connected, close the connection
 	w.mu.Lock()
-	w.connections[id] = conn
+	if _, ok := w.chats[id]; ok {
+		chat.sendJSON(ctx, models.ErrorMessage{
+			Error: "User connected from another location",
+		})
+		return
+	} else {
+		w.chats[id] = chat
+	}
 	w.mu.Unlock()
 
 	defer func() {
 		w.mu.Lock()
-		delete(w.connections, id)
+		delete(w.chats, id)
 		w.mu.Unlock()
 	}()
 
-	ctx := context.Background()
+	pendingMessages, _ := w.db.GetPendingMessages(id)
+	err = chat.sendPendingMessages(pendingMessages)
 
-	pendingMessages, err := w.db.GetPendingMessages(id)
-	if err != nil {
-		http.Error(wr, "Failed to retrieve pending messages", http.StatusInternalServerError)
-		return
-	}
-
-	for _, msg := range pendingMessages {
-		err = conn.Write(ctx, websocket.MessageText, []byte(msg.Payload))
-		if err != nil {
-			http.Error(wr, "Failed to send pending message", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	err = w.db.DeletePendingMessages(id)
-	if err != nil {
-		http.Error(wr, "Failed to delete pending messages", http.StatusInternalServerError)
-		return
+	if err == nil {
+		w.db.DeletePendingMessages(id)
 	}
 
 	for {
@@ -76,28 +113,28 @@ func (w *WebsocketAPI) handleWebsocket(wr http.ResponseWriter, r *http.Request, 
 			break
 		}
 
-		var message models.WebsocketMessage
+		var message models.TransmissionData
 		err = json.Unmarshal(msg, &message)
 		if err != nil {
-			http.Error(wr, "Invalid message format", http.StatusBadRequest)
-			return
+			chat.sendJSON(ctx, models.ErrorMessage{
+				Error: "Invalid message format",
+			})
+			continue
 		}
 
 		w.mu.Lock()
-		receiverConn, connected := w.connections[message.To]
+		receiverConn, connected := w.chats[message.To]
 		w.mu.Unlock()
 
 		if connected {
-			err = receiverConn.Write(ctx, websocket.MessageText, msg)
-			if err != nil {
-				http.Error(wr, "Failed to send message", http.StatusInternalServerError)
-				return
-			}
+			receiverConn.SendMessage(ctx, message)
 		} else {
-			err = w.db.SavePendingMessage(message.To, string(msg))
-			if err != nil {
-				http.Error(wr, "Failed to save pending message", http.StatusInternalServerError)
-				return
+			if w.db.IsUserExists(message.To) {
+				w.db.SavePendingMessage(message)
+			} else {
+				chat.sendJSON(ctx, models.ErrorMessage{
+					Error: "User not found",
+				})
 			}
 		}
 	}

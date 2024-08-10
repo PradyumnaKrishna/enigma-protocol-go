@@ -2,16 +2,44 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"enigma-protocol-go/pkg/db"
 	"enigma-protocol-go/pkg/models"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/rs/cors"
 )
 
 type APIFunc func(r *http.Request, ps httprouter.Params) (interface{}, *models.APIError)
+
+type APIOpts struct {
+	Database       *db.Database
+	AllowedOrigins []string
+}
+
+func NewAPIOpts(
+	dbopts *db.DatabaseOpts,
+	allowedOrigins []string,
+) (*APIOpts, error) {
+	var database *db.Database
+	var err error
+
+	if dbopts == nil {
+		database, err = db.NewDefaultDatabase()
+	} else {
+		database, err = db.NewDatabase(*dbopts)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &APIOpts{
+		Database:       database,
+		AllowedOrigins: allowedOrigins,
+	}, nil
+}
 
 func inJSON(api APIFunc) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -29,22 +57,25 @@ func inJSON(api APIFunc) httprouter.Handle {
 	}
 }
 
-func StartServer() {
+func (opts APIOpts) NewRouter() http.Handler {
 	router := httprouter.New()
 
-	database, err := db.NewDefaultDatabase()
-	if err != nil {
-		fmt.Println("Error starting server:", err)
-		return
-	}
-	protocolAPI := NewProtocolAPI(*database)
+	protocolAPI := NewProtocolAPI(opts)
 	protocolAPI.Register(router)
+
+	websocketAPI := NewWebsocketAPI(opts)
+	websocketAPI.Register(router)
 
 	router.GET("/", inJSON(index))
 	router.GET("/version", inJSON(version))
 
-	fmt.Println("Server started at :8080")
-	http.ListenAndServe(":8080", router)
+	_cors := cors.Options{
+		AllowedOrigins: opts.AllowedOrigins,
+		AllowedMethods: []string{"GET", "POST"},
+	}
+
+	handler := cors.New(_cors).Handler(router)
+	return handler
 }
 
 func index(r *http.Request, ps httprouter.Params) (interface{}, *models.APIError) {

@@ -13,11 +13,10 @@ import (
 
 	"enigma-protocol-go/pkg/models"
 
-	"github.com/julienschmidt/httprouter"
 	"nhooyr.io/websocket"
 )
 
-func createUser(t *testing.T, router *httprouter.Router, publicKey string) string {
+func createUser(t *testing.T, router http.Handler, publicKey string) string {
 	req, _ := http.NewRequest("GET", "/login/"+publicKey, nil)
 	rr := httptest.NewRecorder()
 
@@ -31,7 +30,7 @@ func createUser(t *testing.T, router *httprouter.Router, publicKey string) strin
 	if err := json.NewDecoder(rr.Body).Decode(&res); err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
-	return res.ID
+	return res.User
 }
 
 func TestConnectInvalidUser(t *testing.T) {

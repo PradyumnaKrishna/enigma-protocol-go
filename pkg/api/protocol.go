@@ -13,8 +13,8 @@ type ProtocolAPI struct {
 	db *db.Database
 }
 
-func NewProtocolAPI(d db.Database) *ProtocolAPI {
-	return &ProtocolAPI{db: &d}
+func NewProtocolAPI(opts APIOpts) *ProtocolAPI {
+	return &ProtocolAPI{db: opts.Database}
 }
 
 func (p *ProtocolAPI) Register(r *httprouter.Router) {
@@ -32,7 +32,7 @@ func (p *ProtocolAPI) login(_ *http.Request, ps httprouter.Params) (interface{},
 		}
 	}
 
-	return &models.LoginResponse{ID: id}, nil
+	return &models.LoginResponse{User: id}, nil
 }
 
 func (p *ProtocolAPI) connect(_ *http.Request, ps httprouter.Params) (interface{}, *models.APIError) {

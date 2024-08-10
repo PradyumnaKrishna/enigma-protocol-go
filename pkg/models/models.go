@@ -11,12 +11,12 @@ type ErrorMessage struct {
 }
 
 type LoginResponse struct {
-	ID string `json:"id"`
+	User string `json:"user"`
 }
 
 type ConnectResponse struct {
 	User      string `json:"user"`
-	Publickey string `json:"publickey"`
+	Publickey string `json:"publicKey"`
 }
 
 type TransmissionData struct {

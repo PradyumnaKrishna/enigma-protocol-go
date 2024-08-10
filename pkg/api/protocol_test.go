@@ -8,23 +8,23 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-
-	"github.com/julienschmidt/httprouter"
 )
 
 const DATABSE_PATH = "test.db"
 
-func setup() *httprouter.Router {
-	dbopts := &db.DatabaseOpts{
-		Driver: "sqlite3",
-		Uri:    DATABSE_PATH,
-	}
-
-	router, err := NewRouter(dbopts)
+func setup() http.Handler {
+	opts, err := NewAPIOpts(
+		&db.DatabaseOpts{
+			Driver: "sqlite3",
+			Uri:    DATABSE_PATH,
+		},
+		nil,
+	)
 	if err != nil {
 		panic(err)
 	}
 
+	router := opts.NewRouter()
 	return router
 }
 
@@ -72,7 +72,7 @@ func TestNewUser(t *testing.T) {
 				t.Fatalf("Expected no error, got %v", err)
 			}
 
-			req, _ = http.NewRequest("GET", "/connect/"+res.ID, nil)
+			req, _ = http.NewRequest("GET", "/connect/"+res.User, nil)
 			rr = httptest.NewRecorder()
 
 			router.ServeHTTP(rr, req)

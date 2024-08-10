@@ -19,9 +19,9 @@ type WebsocketAPI struct {
 	mu    sync.Mutex
 }
 
-func NewWebsocketAPI(d db.Database) *WebsocketAPI {
+func NewWebsocketAPI(opts APIOpts) *WebsocketAPI {
 	return &WebsocketAPI{
-		db:    &d,
+		db:    opts.Database,
 		chats: make(map[string]Chat),
 	}
 }
@@ -64,7 +64,7 @@ func (w *WebsocketAPI) handleWebsocket(wr http.ResponseWriter, r *http.Request, 
 	id := ps.ByName("id")
 
 	conn, err := websocket.Accept(wr, r, &websocket.AcceptOptions{
-		OriginPatterns: []string{"localhost:8080"},
+		OriginPatterns: []string{"*"},
 	})
 
 	if err != nil {
